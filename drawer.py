@@ -1,7 +1,18 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-# from matplotlib.colors import LinearSegmentedColormap
+
+def get_position(obj, teamname):
+    if obj.table.t1.name == teamname:
+        return 1
+    if obj.table.t2.name == teamname:
+        return 2
+    if obj.table.t3.name == teamname:
+        return 3
+    if obj.table.t4.name == teamname:
+        return 4
+    raise ValueError('This should not happen')
+
 
 class Team:
     def __init__(self, name, mp, w, d, l, gs, gc, p):
@@ -13,12 +24,22 @@ class Team:
         self.gs = gs
         self.gc = gc
         self.p = p
+        self.init_values = (mp, w, d, l, gs, gc, p)
+
+    def __str__(self):
+        return self.name
+
+    def reset_score(self):
+        self.mp, self.w, self.d, self.l, self.gs, self.gc, self.p = self.init_values
 
 
 class Match:
     def __init__(self, team1, team2):
         self.home = team1
         self.away = team2
+
+    def __str__(self):
+        return f"{self.home} - {self.away}"
 
     def add_result(self, score1, score2):
         self.home.gs += score1
@@ -63,14 +84,14 @@ class Table:
 
 
 class Simulation:
-    def __init__(self):
-        self.t1 = Team('POL', 1, 1, 1, 0, 2, 0, 4)
-        self.t2 = Team('KSA', 1, 1, 0, 1, 2, 3, 3)
-        self.t3 = Team('ARG', 1, 1, 0, 1, 3, 2, 3)
-        self.t4 = Team('MEX', 1, 0, 1, 1, 0, 2, 1)
+    def __init__(self, tm1, tm2, tm3, tm4):
+        self.t1 = tm1
+        self.t2 = tm2
+        self.t3 = tm3
+        self.t4 = tm4
         self.table = Table(self.t1, self.t2, self.t3, self.t4)
-        self.m1 = Match(self.t1, self.t3)
-        self.m2 = Match(self.t2, self.t4)
+        self.m1 = Match(self.t1, self.t2)
+        self.m2 = Match(self.t3, self.t4)
 
     def simulate(self, r1, r2):
         h1, a1 = r1
@@ -81,44 +102,45 @@ class Simulation:
         # self.table.show_stats()
         # self.table.show_advance()
 
-def get_position(obj):
-    if obj.table.t1.name == 'POL':
-        return 1
-    if obj.table.t2.name == 'POL':
-        return 2
-    if obj.table.t3.name == 'POL':
-        return 3
-    if obj.table.t4.name == 'POL':
-        return 4
-    raise ValueError('This should not happen')
+def create_colormap(teams, group, title='', team='POL', max_goals=4):
+    a, b, c, d = teams
+    results = []
+    for i in range(max_goals+1):
+        for j in range(max_goals+1):
+            for k in range(max_goals+1):
+                for l in range(max_goals+1):
+                    s = Simulation(a, b, c, d)
+                    # print(f'{a} {i}:{j} {b}')
+                    # print(f'{c} {k}:{l} {d}')
+                    s.simulate((i, j), (k, l))
+                    results.append((f'{i}:{j}', f'{k}:{l}', get_position(s, team)))
+                    a.reset_score()
+                    b.reset_score()
+                    c.reset_score()
+                    d.reset_score()
 
-results = []
-for i in range(5):
-    for j in range(5):
-        for k in range(5):
-            for l in range(5):
-                s = Simulation()
-                # print(f'POL {i}:{j} ARG')
-                # print(f'KSA {k}:{l} MEX')
-                s.simulate((i, j), (k, l))
-                results.append((f'{i}:{j}', f'{k}:{l}', get_position(s)))
+    df = pd.DataFrame(results)
+    df = pd.get_dummies(df.set_index([0, 1])).unstack()
+    df.columns = df.columns.droplevel(0)
 
-df = pd.DataFrame(results)
-df = pd.get_dummies(df.set_index([0, 1])).unstack()
-df.columns = df.columns.droplevel(0)
+    cmap = sns.diverging_palette(130, 10, as_cmap=True)
 
-# print(df)
+    with sns.axes_style("white"):
+        ax = sns.heatmap(df, annot=True, cmap=cmap, vmin=1, vmax=4, center=2.5,
+                    square=True, linewidths=.5, annot_kws={"size": 12})
 
-cmap = sns.diverging_palette(130, 10, as_cmap=True)
+    if title:
+        plt.title(title)
+    else:
+        plt.title(f"{team}'s Final Group {group} Position")
+    plt.xlabel(f'{c.name} - {d.name}')
+    plt.ylabel(f'{a.name} - {b.name}')
+    plt.show()
 
-# myColors = ((0.22, 0.52, 0.25, 1.0), (0.69, 0.80, 0.70, 1.0), (0.86, 0.3, 0.34, 1.0))
-# cmap = LinearSegmentedColormap.from_list('Custom', myColors, len(myColors))
 
-with sns.axes_style("white"):
-    ax = sns.heatmap(df, annot=True, cmap=cmap, vmin=1, vmax=4, center=2.5,
-                square=True, linewidths=.5, annot_kws={"size": 12})
+t1 = Team('Poland', 1, 1, 1, 0, 2, 0, 4)
+t2 = Team('Saudi Arabia', 1, 1, 0, 1, 2, 3, 3)
+t3 = Team('Argentina', 1, 1, 0, 1, 3, 2, 3)
+t4 = Team('Mexico', 1, 0, 1, 1, 0, 2, 1)
 
-plt.title("Poland's final Group C position")
-plt.xlabel('KSA - MEX')
-plt.ylabel('POL - ARG')
-plt.show()
+create_colormap((t1,t3,t2,t4), 'C', team='Poland')
